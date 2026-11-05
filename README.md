@@ -1,59 +1,139 @@
-# SecureDrop gateway
+<div align="center">
 
-Node-RED gateway for SecureDrop, the self-verifying IoT parcel box.
-It runs the MQTT broker, archives every delivery photo, sends it on Telegram and updates Blynk.
+  <!-- Animated Typing Header -->
+  <a href="https://github.com/sannihith-madasu/securedrop">
+    <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=28&duration=3000&pause=1000&color=10B981&center=true&vCenter=true&width=600&lines=SecureDrop;Edge-Triggered+Delivery+Sentinel;ESP32-CAM+%2B+Node-RED+Telemetry" alt="SecureDrop Header" />
+  </a>
 
-## Run it
+  <p><strong>Low-power, event-driven package verification system built on ESP32-CAM, Node-RED, and the Telegram Bot API.</strong></p>
 
-Needs Node.js 22.9 or newer (https://nodejs.org, LTS installer). Check with `node -v`.
+  <p>
+    <a href="#architecture">Architecture</a> •
+    <a href="#repository-structure">Directory Layout</a> •
+    <a href="#hardware-setup">Hardware</a> •
+    <a href="#getting-started">Quick Start</a> •
+    <a href="#simulation">Simulation</a>
+  </p>
 
-    npm install
-    npm start
+  <p>
+    <img src="https://img.shields.io/badge/Hardware-ESP32--CAM-000000?style=flat-square&logo=espressif&logoColor=white" alt="ESP32-CAM" />
+    <img src="https://img.shields.io/badge/Backend-Node--RED-8F0000?style=flat-square&logo=nodered&logoColor=white" alt="Node-RED" />
+    <img src="https://img.shields.io/badge/Runtime-Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" />
+    <img src="https://img.shields.io/badge/Alerts-Telegram_API-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram" />
+    <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
+  </p>
 
-| What | Where |
-|---|---|
-| Flow editor | http://localhost:1880 |
-| Delivery log | http://localhost:1880/securedrop |
-| Edge-node simulator (webcam) | http://localhost:1880/securedrop/sim |
-| Archived photos | `archive/` folder |
+</div>
 
-With no tokens set, the gateway still archives photos and shows them on the delivery log.
+---
 
-## Demo without hardware
+## Overview
 
-1. `npm start`, open the delivery log in one window and the simulator in another.
-2. Press **Simulate PIR trigger**. The page takes a webcam frame and publishes the same two
-   MQTT messages the ESP32-CAM publishes. The photo appears on the log within a second.
-3. In the flow editor, open the debug sidebar to show the event JSON and notification results.
+Unattended deliveries fail at the last mile due to zero physical verification and high power requirements for continuous video monitoring. **SecureDrop** replaces always-on CCTV streams with an event-driven edge sentinel.
 
-`npm run simulate` (or `node simulate.js photo.jpg`) does the same from the command line.
+The node stays in deep sleep drawing microamps until a PIR motion interrupt fires. Upon wake, it sweeps the drop zone via a PWM servo, captures multi-angle JPEG frames into PSRAM, dispatches the payload to a local Node-RED orchestration server / Telegram webhook, and returns to deep sleep.
 
-## Telegram
+<!-- Drop a screen recording or hardware capture gif at sample/demo.gif -->
+<div align="center">
+  <img src="sample/demo.gif" alt="SecureDrop System Demo" width="750px" />
+</div>
 
-1. In Telegram, message **@BotFather**, send `/newbot`, copy the token.
-2. Send any message to your new bot.
-3. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id`.
-4. In the flow editor, open the **CONFIG** node, paste both values, press **Deploy**.
+## Architecture
 
-## Blynk
+```text
++-------------------------------------------------------------------------+
+| EDGE NODE (firmware/)                                                   |
+|                                                                         |
+|  [PIR Interrupt] --> [Wake EXT0] --> [Servo Pan] --> [OV2640 Frame Grab] |
++---------------------------------------------------------------+---------+
+                                                                |
+                                                   HTTP POST / MQTT Payload
+                                                                |
+                                                                v
++-------------------------------------------------------------------------+
+| ORCHESTRATION & TELEMETRY (flows.json / simulate.js)                    |
+|                                                                         |
+|  [Node-RED Ingest] --> [State Logging] --> [Telegram Bot API Dispatch]  |
++-------------------------------------------------------------------------+
+```
+## Repository Structure
 
-1. On blynk.cloud create a template with two datastreams: `V0` Integer (delivery count, raise the max)
-   and `V1` String (last delivery time). Add a device from it.
-2. Copy the device **Auth Token** into the **CONFIG** node, press **Deploy**.
-3. Put a Value Display / Label widget on each datastream in the dashboard.
+```text
+securedrop/
+├── firmware/           # ESP32-CAM C/C++ source, pin definitions, and sleep logic
+├── sample/             # Reference payloads, test captures, and media assets
+├── flows.json          # Node-RED flow definitions for ingestion and alerting
+├── settings.js         # Node-RED runtime configuration
+├── simulate.js         # Mock event generator for testing flows offline
+├── package.json        # Node.js dependencies and start scripts
+└── README.md
+```
 
-Do not upload `flows.json` to GitHub with real tokens in it.
+## Hardware Setup
 
-## MQTT contract
+| Component | Specification | Pin / Interface |
+| :--- | :--- | :--- |
+| **MCU** | AI-Thinker ESP32-CAM (4MB PSRAM) | Core Controller |
+| **Camera** | OV2640 Sensor (UXGA / SVGA) | Onboard DVP |
+| **Motion Sensor** | HC-SR501 / AM312 PIR | `GPIO 13` (RTC IO) |
+| **Actuator** | SG90 PWM Micro Servo | `GPIO 14` |
+| **Power Supply** | 5V / 2A Buck Converter | `5V` / `GND` |
 
-| Topic | Payload |
-|---|---|
-| `securedrop/event` | JSON: `{"device":"securedrop-01","event":"delivery","wake":"pir","rssi":-55,"bytes":23110,"boot":7}` |
-| `securedrop/image` | raw JPEG bytes, published right after the event |
+<details>
+<summary><strong>FTDI Flashing Pinout (Click to expand)</strong></summary>
 
-## Real hardware
+<br>
 
-`firmware/SecureDrop/SecureDrop.ino` is the ESP32-CAM sketch (Arduino IDE, board "AI Thinker ESP32-CAM",
-library PubSubClient). Set Wi-Fi name, password and the gateway PC's IP at the top.
-Wiring: PIR VCC to 5V, GND to GND, OUT to GPIO 13.
-The PC firewall must allow inbound TCP 1883, and both devices must be on the same Wi-Fi.
+The ESP32-CAM lacks an onboard USB-to-UART bridge. Connect an external 3.3V/5V FTDI programmer as follows:
+
+| ESP32-CAM | FTDI Programmer | Notes |
+| :--- | :--- | :--- |
+| `5V` | `VCC (5V)` | Use 5V jumper to prevent brownouts |
+| `GND` | `GND` | Common ground |
+| `U0R` | `TX` | Serial Receive |
+| `U0T` | `RX` | Serial Transmit |
+| `GPIO 0` | `GND` | **Bridge only while flashing**; remove to boot |
+
+</details>
+
+## Getting Started
+
+### 1. Backend & Node-RED Setup
+
+Clone the repository and install the Node-RED runtime dependencies[cite: 1]:
+
+```bash
+git clone [https://github.com/sannihith-madasu/securedrop.git](https://github.com/sannihith-madasu/securedrop.git)
+cd securedrop
+npm install
+```
+
+Start the Node-RED instance using the local project configuration[cite: 1]:
+
+```bash
+npx node-red -s settings.js flows.json
+```
+
+Open `http://localhost:1880` in your browser to inspect the flow or configure your Telegram Bot token credentials.
+
+### 2. Testing via Simulation
+
+To verify the pipeline without physical ESP32-CAM hardware connected, run the simulator script in a separate terminal[cite: 1]:
+
+```bash
+node simulate.js
+```
+
+This dispatches synthetic motion and image events into the Node-RED ingestion endpoint to verify downstream Telegram notifications.
+
+### 3. Flashing Firmware
+
+1. Open the `firmware/` directory in PlatformIO or Arduino IDE[cite: 1].
+2. Copy the template header and populate your Wi-Fi credentials, Node-RED host IP, and Telegram parameters.
+3. Bridge `GPIO 0` to `GND`, compile, and upload.
+4. Remove the `GPIO 0` bridge and press the onboard `RST` button.
+
+## Acknowledgments & Disclaimer
+
+This project was built as part of the Summer Internship Program at **Sreenidhi Institute of Science and Technology (SNIST)** and is intended strictly as a proof-of-concept and educational prototype and is not a hardened, production-ready security system. 
+
