@@ -1,0 +1,23 @@
+# Node dependencies
+node_modules/
+
+# Node-RED runtime & config caches
+.config.*
+*.backup
+
+# Node-RED context storage (runtime persistent state)
+context/
+
+# Node-RED credentials (never commit encrypted or raw creds)
+flows_cred.json
+*_cred.json
+
+# Optional: Scratchpad / local backups
+archive/
+
+# OS & Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

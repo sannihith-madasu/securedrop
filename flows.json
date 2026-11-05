@@ -1,0 +1,764 @@
+[
+  {
+    "id": "sd_tab",
+    "type": "tab",
+    "label": "SecureDrop Gateway",
+    "disabled": false,
+    "info": "SecureDrop - self-verifying IoT parcel box. Gateway tier."
+  },
+  {
+    "id": "sd_mqtt",
+    "type": "mqtt-broker",
+    "name": "Local Aedes broker",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "securedrop-gateway",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "closeTopic": "",
+    "closePayload": "",
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": ""
+  },
+  {
+    "id": "c1",
+    "type": "comment",
+    "z": "sd_tab",
+    "name": "1. Embedded MQTT broker (port 1883) and settings",
+    "info": "",
+    "x": 220,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "sd_broker",
+    "type": "aedes broker",
+    "z": "sd_tab",
+    "name": "MQTT broker :1883",
+    "mqtt_port": 1883,
+    "mqtt_ws_bind": "port",
+    "mqtt_ws_port": "",
+    "mqtt_ws_path": "",
+    "cert": "",
+    "key": "",
+    "certname": "",
+    "keyname": "",
+    "persistence_bind": "memory",
+    "dburl": "",
+    "usetls": false,
+    "x": 150,
+    "y": 90,
+    "wires": [
+      [],
+      []
+    ]
+  },
+  {
+    "id": "sd_boot",
+    "type": "inject",
+    "z": "sd_tab",
+    "name": "on start",
+    "props": [],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.1,
+    "topic": "",
+    "x": 420,
+    "y": 90,
+    "wires": [
+      [
+        "sd_cfg"
+      ]
+    ]
+  },
+  {
+    "id": "sd_cfg",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "CONFIG  (edit me: Telegram + Blynk)",
+    "func": "// ─────────────────────────────────────────────────────────────────────\n//  SecureDrop gateway settings. Fill these in, then press Deploy.\n//  Leave a token empty to switch that integration off (the rest still runs).\n// ─────────────────────────────────────────────────────────────────────\nconst cfg = {\n    // Telegram: create a bot with @BotFather, paste its token here.\n    telegramToken: \"\",\n    // Your chat id: send any message to the bot, then open\n    // https://api.telegram.org/bot<TOKEN>/getUpdates and copy chat.id\n    telegramChatId: \"\",\n\n    // Blynk IoT: Device -> Device Info -> Auth Token\n    blynkToken: \"\",\n    blynkCountPin: \"V0\",   // Integer datastream: total deliveries\n    blynkTimePin:  \"V1\",   // String datastream: time of last delivery\n\n    archiveDir: \"archive\", // folder (next to flows.json) where photos are kept\n    keep: 50               // deliveries shown on the log page\n};\n\n// Environment variables override the values above (keeps tokens out of the file).\ncfg.telegramToken  = env.get(\"SD_TELEGRAM_TOKEN\")   || cfg.telegramToken;\ncfg.telegramChatId = env.get(\"SD_TELEGRAM_CHAT_ID\") || cfg.telegramChatId;\ncfg.blynkToken     = env.get(\"SD_BLYNK_TOKEN\")      || cfg.blynkToken;\ncfg.telegramBase   = env.get(\"SD_TELEGRAM_BASE\")    || \"https://api.telegram.org\";\ncfg.blynkBase      = env.get(\"SD_BLYNK_BASE\")       || \"https://blynk.cloud\";\n\nflow.set(\"cfg\", cfg);\nconst on = [];\nif (cfg.telegramToken && cfg.telegramChatId) on.push(\"Telegram\");\nif (cfg.blynkToken) on.push(\"Blynk\");\nnode.status({ fill: on.length ? \"green\" : \"grey\", shape: \"dot\",\n              text: \"archive\" + (on.length ? \" + \" + on.join(\" + \") : \" only\") });\nreturn null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 660,
+    "y": 90,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "c2",
+    "type": "comment",
+    "z": "sd_tab",
+    "name": "2. Delivery event from the edge node (JSON)",
+    "info": "",
+    "x": 200,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "sd_in_evt",
+    "type": "mqtt in",
+    "z": "sd_tab",
+    "name": "securedrop/event",
+    "topic": "securedrop/event",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "sd_mqtt",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 210,
+    "wires": [
+      [
+        "sd_evt"
+      ]
+    ]
+  },
+  {
+    "id": "sd_evt",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Remember event",
+    "func": "// The firmware publishes a small JSON event just before the image.\n// Keep it so the image handler can attach device details to the photo.\nconst e = (msg.payload && typeof msg.payload === \"object\") ? msg.payload : {};\nflow.set(\"lastEvent\", { at: Date.now(), data: e });\nnode.status({ fill: \"blue\", shape: \"dot\", text: (e.device || \"unknown\") + \" woke (\" + (e.wake || \"?\") + \")\" });\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 210,
+    "wires": [
+      [
+        "sd_dbg_evt"
+      ]
+    ]
+  },
+  {
+    "id": "sd_dbg_evt",
+    "type": "debug",
+    "z": "sd_tab",
+    "name": "event",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 610,
+    "y": 210,
+    "wires": []
+  },
+  {
+    "id": "c3",
+    "type": "comment",
+    "z": "sd_tab",
+    "name": "3. Image from the edge node  ->  archive, Telegram, Blynk",
+    "info": "",
+    "x": 240,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sd_in_img",
+    "type": "mqtt in",
+    "z": "sd_tab",
+    "name": "securedrop/image",
+    "topic": "securedrop/image",
+    "qos": "1",
+    "datatype": "buffer",
+    "broker": "sd_mqtt",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 360,
+    "wires": [
+      [
+        "sd_rec"
+      ]
+    ]
+  },
+  {
+    "id": "sd_rec",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Build delivery record",
+    "func": "// One image = one delivery. Build the record, then fan out to\n// archive / Telegram / Blynk (each wire gets its own copy of msg).\nconst cfg = flow.get(\"cfg\") || { archiveDir: \"archive\", keep: 50 };\nconst img = msg.payload;\n\n// A JPEG always starts with FF D8. Drop anything else (truncated or junk payload).\nif (!Buffer.isBuffer(img) || img.length < 4 || img[0] !== 0xFF || img[1] !== 0xD8) {\n    node.status({ fill: \"red\", shape: \"ring\", text: \"rejected: not a JPEG\" });\n    node.warn(\"securedrop/image payload is not a JPEG, ignored\");\n    return null;\n}\n\nconst now = new Date();\nconst p = (n) => String(n).padStart(2, \"0\");\nconst date = now.getFullYear() + \"-\" + p(now.getMonth() + 1) + \"-\" + p(now.getDate());\nconst time = p(now.getHours()) + \":\" + p(now.getMinutes()) + \":\" + p(now.getSeconds());\n\n// Use the event only if it arrived in the last 15 s (i.e. it belongs to this wake).\nconst last = flow.get(\"lastEvent\");\nconst ev = (last && now.getTime() - last.at < 15000) ? last.data : {};\n\nconst count = (flow.get(\"count\") || 0) + 1;\nflow.set(\"count\", count);\n\nconst file = \"delivery_\" + date + \"_\" + time.replace(/:/g, \"-\") + \"_\" + String(count).padStart(4, \"0\") + \".jpg\";\nconst record = {\n    id: count,\n    time: date + \" \" + time,\n    file: file,\n    bytes: img.length,\n    device: String(ev.device || \"unknown\").slice(0, 40),\n    wake: String(ev.wake || \"?\").slice(0, 20),\n    rssi: (typeof ev.rssi === \"number\") ? ev.rssi : null,\n    archived: false,\n    telegram: (cfg.telegramToken && cfg.telegramChatId) ? \"pending\" : \"off\",\n    blynk: cfg.blynkToken ? \"pending\" : \"off\"\n};\n\nconst list = flow.get(\"deliveries\") || [];\nlist.unshift(record);\nflow.set(\"deliveries\", list.slice(0, cfg.keep || 50));\n\nmsg.record = record;\nmsg.filename = cfg.archiveDir + \"/\" + file;\nnode.status({ fill: \"green\", shape: \"dot\", text: \"#\" + count + \"  \" + time + \"  \" + Math.round(img.length / 1024) + \" kB\" });\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 360,
+    "wires": [
+      [
+        "sd_file",
+        "sd_tg_build",
+        "sd_bl_build"
+      ]
+    ]
+  },
+  {
+    "id": "sd_file",
+    "type": "file",
+    "z": "sd_tab",
+    "name": "Archive JPEG",
+    "filename": "filename",
+    "filenameType": "msg",
+    "appendNewline": false,
+    "createDir": true,
+    "overwriteFile": "true",
+    "encoding": "none",
+    "x": 670,
+    "y": 320,
+    "wires": [
+      [
+        "sd_file_ok"
+      ]
+    ]
+  },
+  {
+    "id": "sd_file_ok",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "archived",
+    "func": "const list = flow.get(\"deliveries\") || [];\nconst r = list.find(d => d.id === msg.record.id);\nif (r) { r.archived = true; flow.set(\"deliveries\", list); }\nnode.status({ fill: \"green\", shape: \"dot\", text: msg.record.file });\nreturn null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 880,
+    "y": 320,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "sd_tg_build",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Telegram: sendPhoto",
+    "func": "// Telegram Bot API: POST /bot<token>/sendPhoto as multipart/form-data.\nconst cfg = flow.get(\"cfg\") || {};\nif (!cfg.telegramToken || !cfg.telegramChatId) {\n    node.status({ fill: \"grey\", shape: \"ring\", text: \"off (no token in CONFIG)\" });\n    return null;\n}\nconst r = msg.record;\nmsg.branch = \"telegram\";\nmsg.method = \"POST\";\nmsg.url = cfg.telegramBase + \"/bot\" + cfg.telegramToken + \"/sendPhoto\";\nmsg.headers = { \"content-type\": \"multipart/form-data\" };\nmsg.payload = {\n    chat_id: String(cfg.telegramChatId),\n    caption: \"SecureDrop: parcel delivered\\n\" + r.time + \"\\nDevice: \" + r.device + \"  |  Delivery #\" + r.id,\n    photo: { value: msg.payload, options: { filename: r.file, contentType: \"image/jpeg\" } }\n};\nnode.status({ fill: \"blue\", shape: \"dot\", text: \"sending #\" + r.id });\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 680,
+    "y": 370,
+    "wires": [
+      [
+        "sd_tg_req"
+      ]
+    ]
+  },
+  {
+    "id": "sd_tg_req",
+    "type": "http request",
+    "z": "sd_tab",
+    "name": "Telegram Bot API",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 900,
+    "y": 370,
+    "wires": [
+      [
+        "sd_tg_res"
+      ]
+    ]
+  },
+  {
+    "id": "sd_tg_res",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Telegram result",
+    "func": "const ok = msg.statusCode === 200 && msg.payload && msg.payload.ok === true;\nconst list = flow.get(\"deliveries\") || [];\nconst r = list.find(d => d.id === msg.record.id);\nif (r) { r.telegram = ok ? \"sent\" : \"failed\"; flow.set(\"deliveries\", list); }\nnode.status({ fill: ok ? \"green\" : \"red\", shape: \"dot\", text: ok ? \"sent #\" + msg.record.id : \"failed (HTTP \" + msg.statusCode + \")\" });\nmsg.payload = { telegram: ok ? \"sent\" : \"failed\", status: msg.statusCode,\n                detail: ok ? undefined : (msg.payload && msg.payload.description) };\ndelete msg.url; delete msg.headers;   // never show the bot token in the debug pane\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1110,
+    "y": 370,
+    "wires": [
+      [
+        "sd_dbg_note"
+      ]
+    ]
+  },
+  {
+    "id": "sd_bl_build",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Blynk: update datastreams",
+    "func": "// Blynk HTTPS API: GET /external/api/batch/update?token=...&V0=...&V1=...\nconst cfg = flow.get(\"cfg\") || {};\nif (!cfg.blynkToken) {\n    node.status({ fill: \"grey\", shape: \"ring\", text: \"off (no token in CONFIG)\" });\n    return null;\n}\nconst r = msg.record;\nmsg.branch = \"blynk\";\nmsg.method = \"GET\";\nmsg.url = cfg.blynkBase + \"/external/api/batch/update\"\n        + \"?token=\" + encodeURIComponent(cfg.blynkToken)\n        + \"&\" + cfg.blynkCountPin + \"=\" + r.id\n        + \"&\" + cfg.blynkTimePin + \"=\" + encodeURIComponent(r.time);\nmsg.payload = \"\";\nmsg.headers = {};\nnode.status({ fill: \"blue\", shape: \"dot\", text: \"updating\" });\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 700,
+    "y": 420,
+    "wires": [
+      [
+        "sd_bl_req"
+      ]
+    ]
+  },
+  {
+    "id": "sd_bl_req",
+    "type": "http request",
+    "z": "sd_tab",
+    "name": "Blynk Cloud API",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 900,
+    "y": 420,
+    "wires": [
+      [
+        "sd_bl_res"
+      ]
+    ]
+  },
+  {
+    "id": "sd_bl_res",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Blynk result",
+    "func": "const ok = msg.statusCode === 200;\nconst list = flow.get(\"deliveries\") || [];\nconst r = list.find(d => d.id === msg.record.id);\nif (r) { r.blynk = ok ? \"updated\" : \"failed\"; flow.set(\"deliveries\", list); }\nnode.status({ fill: ok ? \"green\" : \"red\", shape: \"dot\", text: ok ? \"updated #\" + msg.record.id : \"failed (HTTP \" + msg.statusCode + \")\" });\nmsg.payload = { blynk: ok ? \"updated\" : \"failed\", status: msg.statusCode };\ndelete msg.url; delete msg.headers;   // never show the auth token in the debug pane\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1100,
+    "y": 420,
+    "wires": [
+      [
+        "sd_dbg_note"
+      ]
+    ]
+  },
+  {
+    "id": "sd_dbg_note",
+    "type": "debug",
+    "z": "sd_tab",
+    "name": "notification",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 1310,
+    "y": 395,
+    "wires": []
+  },
+  {
+    "id": "sd_catch",
+    "type": "catch",
+    "z": "sd_tab",
+    "name": "network error",
+    "scope": [
+      "sd_tg_req",
+      "sd_bl_req"
+    ],
+    "uncaught": false,
+    "x": 890,
+    "y": 470,
+    "wires": [
+      [
+        "sd_catch_fn"
+      ]
+    ]
+  },
+  {
+    "id": "sd_catch_fn",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Mark as failed",
+    "func": "// No internet / DNS failure etc. The photo is already archived; just record the miss.\nconst list = flow.get(\"deliveries\") || [];\nconst r = msg.record && list.find(d => d.id === msg.record.id);\nif (r && msg.branch) { r[msg.branch] = \"failed\"; flow.set(\"deliveries\", list); }\nmsg.payload = { [msg.branch || \"notify\"]: \"failed\", detail: msg.error && msg.error.message };\ndelete msg.url; delete msg.headers;\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1100,
+    "y": 470,
+    "wires": [
+      [
+        "sd_dbg_note"
+      ]
+    ]
+  },
+  {
+    "id": "c4",
+    "type": "comment",
+    "z": "sd_tab",
+    "name": "4. Local delivery log  ->  http://localhost:1880/securedrop",
+    "info": "",
+    "x": 250,
+    "y": 540,
+    "wires": []
+  },
+  {
+    "id": "sd_h_page",
+    "type": "http in",
+    "z": "sd_tab",
+    "name": "",
+    "url": "/securedrop",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 130,
+    "y": 590,
+    "wires": [
+      [
+        "sd_page"
+      ]
+    ]
+  },
+  {
+    "id": "sd_page",
+    "type": "template",
+    "z": "sd_tab",
+    "name": "Log page (HTML)",
+    "field": "payload",
+    "fieldType": "msg",
+    "format": "html",
+    "syntax": "plain",
+    "template": "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>SecureDrop - Delivery Log</title>\n<style>\n  :root { --bg:#f4f5f7; --card:#fff; --ink:#16202c; --mute:#5f6b7a; --line:#dfe3e8; --accent:#0b6e4f; --bad:#b3261e; --warn:#8a5a00; }\n  * { box-sizing:border-box; }\n  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,\"Segoe UI\",Roboto,sans-serif; }\n  header { background:var(--ink); color:#fff; padding:18px 24px; display:flex; flex-wrap:wrap; gap:8px 24px; align-items:baseline; }\n  header h1 { margin:0; font-size:20px; letter-spacing:.2px; }\n  header span { color:#b9c3cf; font-size:13px; }\n  header a { color:#9fe0c8; font-size:13px; margin-left:auto; }\n  main { max-width:1080px; margin:0 auto; padding:20px 16px 48px; }\n  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:20px; }\n  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }\n  .stat b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }\n  .stat small { color:var(--mute); text-transform:uppercase; letter-spacing:.6px; font-size:11px; }\n  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.8px; color:var(--mute); margin:24px 0 10px; }\n  .latest { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); }\n  .latest img { width:100%; height:100%; max-height:440px; object-fit:contain; background:#0d1117; display:block; }\n  .latest dl { margin:0; padding:18px 20px; display:grid; grid-template-columns:auto 1fr; gap:8px 16px; align-content:start; }\n  dt { color:var(--mute); } dd { margin:0; font-variant-numeric:tabular-nums; word-break:break-word; }\n  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }\n  .item { background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }\n  .item img { width:100%; aspect-ratio:4/3; object-fit:cover; background:#0d1117; display:block; }\n  .item div { padding:8px 10px; font-size:13px; }\n  .item b { font-variant-numeric:tabular-nums; }\n  .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; border:1px solid currentColor; margin:2px 4px 0 0; }\n  .sent,.updated,.yes { color:var(--accent); } .failed { color:var(--bad); } .pending { color:var(--warn); } .off,.no { color:var(--mute); }\n  .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:40px 20px; text-align:center; color:var(--mute); }\n  @media (max-width:700px) { .latest { grid-template-columns:1fr; } }\n</style>\n</head>\n<body>\n<header>\n  <h1>SecureDrop</h1><span>Self-verifying IoT parcel box &middot; gateway delivery log</span>\n  <a href=\"/securedrop/sim\">Open simulator</a>\n</header>\n<main>\n  <div class=\"stats\">\n    <div class=\"stat\"><small>Total deliveries</small><b id=\"s-count\">0</b></div>\n    <div class=\"stat\"><small>Last delivery</small><b id=\"s-last\">-</b></div>\n    <div class=\"stat\"><small>Telegram</small><b id=\"s-tg\">-</b></div>\n    <div class=\"stat\"><small>Blynk</small><b id=\"s-bl\">-</b></div>\n  </div>\n  <div id=\"content\"><div class=\"empty\">Waiting for the first delivery on <code>securedrop/image</code>&hellip;</div></div>\n</main>\n<script>\n  var lastJson = \"\";\n  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }\n  function pill(label, state) { return el(\"span\", \"pill \" + state, label + \": \" + state); }\n  function kb(n) { return (n / 1024).toFixed(1) + \" kB\"; }\n  function row(dl, k, v) { dl.appendChild(el(\"dt\", \"\", k)); var dd = el(\"dd\"); if (typeof v === \"string\") dd.textContent = v; else dd.appendChild(v); dl.appendChild(dd); }\n  function render(d) {\n    document.getElementById(\"s-count\").textContent = d.count;\n    document.getElementById(\"s-last\").textContent = d.deliveries.length ? d.deliveries[0].time.split(\" \")[1] : \"-\";\n    var tg = document.getElementById(\"s-tg\"), bl = document.getElementById(\"s-bl\");\n    tg.textContent = d.telegram ? \"On\" : \"Off\"; tg.className = d.telegram ? \"yes\" : \"no\";\n    bl.textContent = d.blynk ? \"On\" : \"Off\"; bl.className = d.blynk ? \"yes\" : \"no\";\n    var c = document.getElementById(\"content\");\n    if (!d.deliveries.length) return;\n    c.textContent = \"\";\n    var f = d.deliveries[0];\n    c.appendChild(el(\"h2\", \"\", \"Latest delivery\"));\n    var box = el(\"div\", \"latest\"), img = el(\"img\");\n    img.src = \"/securedrop/img/\" + encodeURIComponent(f.file); img.alt = \"Delivery photo #\" + f.id;\n    box.appendChild(img);\n    var dl = el(\"dl\");\n    row(dl, \"Delivery\", \"#\" + f.id);\n    row(dl, \"Received\", f.time);\n    row(dl, \"Device\", f.device + (f.rssi != null ? \"  (\" + f.rssi + \" dBm)\" : \"\"));\n    row(dl, \"Wake source\", f.wake);\n    row(dl, \"Image\", kb(f.bytes));\n    row(dl, \"Archive file\", f.file);\n    var st = el(\"span\"); st.appendChild(pill(\"archive\", f.archived ? \"yes\" : \"pending\")); st.appendChild(pill(\"telegram\", f.telegram)); st.appendChild(pill(\"blynk\", f.blynk));\n    row(dl, \"Status\", st);\n    box.appendChild(dl); c.appendChild(box);\n    if (d.deliveries.length > 1) {\n      c.appendChild(el(\"h2\", \"\", \"Earlier deliveries\"));\n      var g = el(\"div\", \"grid\");\n      d.deliveries.slice(1).forEach(function (r) {\n        var it = el(\"div\", \"item\"), im = el(\"img\");\n        im.loading = \"lazy\"; im.src = \"/securedrop/img/\" + encodeURIComponent(r.file); im.alt = \"Delivery photo #\" + r.id;\n        var t = el(\"div\"); t.appendChild(el(\"b\", \"\", \"#\" + r.id + \"  \" + r.time)); t.appendChild(el(\"br\"));\n        t.appendChild(document.createTextNode(r.device + \"  \" + kb(r.bytes))); t.appendChild(el(\"br\"));\n        t.appendChild(pill(\"telegram\", r.telegram)); t.appendChild(pill(\"blynk\", r.blynk));\n        it.appendChild(im); it.appendChild(t); g.appendChild(it);\n      });\n      c.appendChild(g);\n    }\n  }\n  function poll() {\n    fetch(\"/securedrop/api\").then(function (r) { return r.text(); }).then(function (t) {\n      if (t !== lastJson) { lastJson = t; render(JSON.parse(t)); }\n    }).catch(function () {});\n  }\n  poll(); setInterval(poll, 1500);\n</script>\n</body>\n</html>\n",
+    "output": "str",
+    "x": 400,
+    "y": 590,
+    "wires": [
+      [
+        "sd_h_out"
+      ]
+    ]
+  },
+  {
+    "id": "sd_h_api",
+    "type": "http in",
+    "z": "sd_tab",
+    "name": "",
+    "url": "/securedrop/api",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 150,
+    "y": 640,
+    "wires": [
+      [
+        "sd_api"
+      ]
+    ]
+  },
+  {
+    "id": "sd_api",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Deliveries as JSON",
+    "func": "const cfg = flow.get(\"cfg\") || {};\nmsg.payload = {\n    count: flow.get(\"count\") || 0,\n    telegram: !!(cfg.telegramToken && cfg.telegramChatId),\n    blynk: !!cfg.blynkToken,\n    deliveries: flow.get(\"deliveries\") || []\n};\nmsg.headers = { \"content-type\": \"application/json\", \"cache-control\": \"no-store\" };\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 640,
+    "wires": [
+      [
+        "sd_h_out"
+      ]
+    ]
+  },
+  {
+    "id": "sd_h_img",
+    "type": "http in",
+    "z": "sd_tab",
+    "name": "",
+    "url": "/securedrop/img/:name",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 690,
+    "wires": [
+      [
+        "sd_img_chk"
+      ]
+    ]
+  },
+  {
+    "id": "sd_img_chk",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Check file name",
+    "func": "// Only serve files this gateway wrote (blocks ../ style paths).\nconst cfg = flow.get(\"cfg\") || { archiveDir: \"archive\" };\nconst name = String(msg.req.params.name || \"\");\nif (!/^delivery_[0-9_-]+\\.jpg$/.test(name)) {\n    msg.statusCode = 404; msg.payload = \"not found\";\n    return [null, msg];\n}\nmsg.filename = cfg.archiveDir + \"/\" + name;\nreturn [msg, null];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 690,
+    "wires": [
+      [
+        "sd_img_read"
+      ],
+      [
+        "sd_h_out"
+      ]
+    ]
+  },
+  {
+    "id": "sd_img_read",
+    "type": "file in",
+    "z": "sd_tab",
+    "name": "Read from archive",
+    "filename": "filename",
+    "filenameType": "msg",
+    "format": "",
+    "chunk": false,
+    "sendError": false,
+    "encoding": "none",
+    "allProps": false,
+    "x": 630,
+    "y": 680,
+    "wires": [
+      [
+        "sd_img_hdr"
+      ]
+    ]
+  },
+  {
+    "id": "sd_img_hdr",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "image/jpeg",
+    "func": "msg.headers = { \"content-type\": \"image/jpeg\", \"cache-control\": \"max-age=3600\" };\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 830,
+    "y": 680,
+    "wires": [
+      [
+        "sd_h_out"
+      ]
+    ]
+  },
+  {
+    "id": "sd_img_catch",
+    "type": "catch",
+    "z": "sd_tab",
+    "name": "file missing",
+    "scope": [
+      "sd_img_read"
+    ],
+    "uncaught": false,
+    "x": 630,
+    "y": 730,
+    "wires": [
+      [
+        "sd_img_404"
+      ]
+    ]
+  },
+  {
+    "id": "sd_img_404",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "404",
+    "func": "msg.statusCode = 404; msg.payload = \"not found\"; msg.headers = {};\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 830,
+    "y": 730,
+    "wires": [
+      [
+        "sd_h_out"
+      ]
+    ]
+  },
+  {
+    "id": "sd_h_out",
+    "type": "http response",
+    "z": "sd_tab",
+    "name": "",
+    "statusCode": "",
+    "headers": {},
+    "x": 1050,
+    "y": 640,
+    "wires": []
+  },
+  {
+    "id": "c5",
+    "type": "comment",
+    "z": "sd_tab",
+    "name": "5. Edge-node SIMULATOR (webcam stands in for the ESP32-CAM)  ->  /securedrop/sim",
+    "info": "",
+    "x": 320,
+    "y": 800,
+    "wires": []
+  },
+  {
+    "id": "sd_h_sim",
+    "type": "http in",
+    "z": "sd_tab",
+    "name": "",
+    "url": "/securedrop/sim",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 140,
+    "y": 850,
+    "wires": [
+      [
+        "sd_sim_page"
+      ]
+    ]
+  },
+  {
+    "id": "sd_sim_page",
+    "type": "template",
+    "z": "sd_tab",
+    "name": "Simulator page (HTML)",
+    "field": "payload",
+    "fieldType": "msg",
+    "format": "html",
+    "syntax": "plain",
+    "template": "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>SecureDrop - Edge Node Simulator</title>\n<style>\n  body { margin:0; background:#f4f5f7; color:#16202c; font:15px/1.5 system-ui,-apple-system,\"Segoe UI\",Roboto,sans-serif; }\n  header { background:#16202c; color:#fff; padding:18px 24px; display:flex; flex-wrap:wrap; gap:8px 24px; align-items:baseline; }\n  header h1 { margin:0; font-size:20px; } header span { color:#ffd27a; font-size:13px; } header a { color:#9fe0c8; font-size:13px; margin-left:auto; }\n  main { max-width:720px; margin:0 auto; padding:20px 16px 48px; }\n  .card { background:#fff; border:1px solid #dfe3e8; border-radius:12px; padding:18px; margin-bottom:16px; }\n  video { width:100%; border-radius:8px; background:#0d1117; aspect-ratio:4/3; display:block; }\n  button { font:inherit; font-weight:600; padding:12px 18px; border-radius:8px; border:0; background:#0b6e4f; color:#fff; cursor:pointer; margin-top:12px; }\n  button:disabled { background:#9aa5b1; cursor:not-allowed; }\n  p { margin:0 0 10px; } small, .mute { color:#5f6b7a; } #msg { margin-top:10px; min-height:1.5em; font-variant-numeric:tabular-nums; }\n  code { background:#eef0f3; padding:1px 5px; border-radius:4px; }\n</style>\n</head>\n<body>\n<header><h1>SecureDrop</h1><span>EDGE NODE SIMULATOR - stands in for the ESP32-CAM + PIR</span><a href=\"/securedrop\">Open delivery log</a></header>\n<main>\n  <div class=\"card\">\n    <p>The button below does what the firmware does on a PIR wake: captures one frame and publishes\n       <code>securedrop/event</code> then <code>securedrop/image</code> to the MQTT broker. The gateway cannot tell the difference.</p>\n    <video id=\"v\" autoplay playsinline muted></video>\n    <button id=\"go\" disabled>Simulate PIR trigger</button>\n    <div id=\"msg\" class=\"mute\">Starting camera&hellip;</div>\n  </div>\n  <div class=\"card\">\n    <p><b>No camera?</b> Send a JPEG file instead.</p>\n    <input type=\"file\" id=\"f\" accept=\"image/jpeg\">\n  </div>\n</main>\n<script>\n  var v = document.getElementById(\"v\"), go = document.getElementById(\"go\"), msg = document.getElementById(\"msg\");\n  function send(blob) {\n    msg.textContent = \"Publishing \" + (blob.size / 1024).toFixed(1) + \" kB...\";\n    fetch(\"/securedrop/sim/trigger\", { method: \"POST\", headers: { \"content-type\": \"application/octet-stream\" }, body: blob })\n      .then(function (r) { return r.json(); })\n      .then(function (j) { msg.textContent = j.ok ? \"Published at \" + new Date().toLocaleTimeString() + \". Check the delivery log.\" : \"Error: \" + j.error; })\n      .catch(function (e) { msg.textContent = \"Error: \" + e.message; });\n  }\n  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {\n    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then(function (s) {\n      v.srcObject = s; go.disabled = false; msg.textContent = \"Camera ready (VGA, like the OV2640 setting in the firmware).\";\n    }).catch(function (e) { msg.textContent = \"Camera unavailable (\" + e.name + \"). Use the file option below.\"; });\n  } else { msg.textContent = \"Camera needs http://localhost. Use the file option below.\"; }\n  go.onclick = function () {\n    var c = document.createElement(\"canvas\"); c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;\n    c.getContext(\"2d\").drawImage(v, 0, 0, c.width, c.height);\n    c.toBlob(send, \"image/jpeg\", 0.8);\n  };\n  document.getElementById(\"f\").onchange = function (e) { if (e.target.files[0]) send(e.target.files[0]); };\n</script>\n</body>\n</html>\n",
+    "output": "str",
+    "x": 410,
+    "y": 850,
+    "wires": [
+      [
+        "sd_h_out2"
+      ]
+    ]
+  },
+  {
+    "id": "sd_h_trig",
+    "type": "http in",
+    "z": "sd_tab",
+    "name": "",
+    "url": "/securedrop/sim/trigger",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 170,
+    "y": 900,
+    "wires": [
+      [
+        "sd_sim_pub"
+      ]
+    ]
+  },
+  {
+    "id": "sd_sim_pub",
+    "type": "function",
+    "z": "sd_tab",
+    "name": "Publish like the firmware",
+    "func": "// SIMULATOR ONLY. Publishes exactly what the ESP32-CAM firmware publishes:\n// a JSON event on securedrop/event, then the JPEG bytes on securedrop/image.\n// Both go through the real broker, so sections 2 and 3 run unchanged.\nconst img = msg.payload;\nif (!Buffer.isBuffer(img) || img.length < 4) {\n    msg.statusCode = 400; msg.payload = { ok: false, error: \"send JPEG bytes as application/octet-stream\" };\n    return [null, msg];\n}\nconst n = (context.get(\"boot\") || 0) + 1;\ncontext.set(\"boot\", n);\nconst evt = { topic: \"securedrop/event\",\n              payload: JSON.stringify({ device: \"simulator\", event: \"delivery\", wake: \"button\", bytes: img.length, boot: n }) };\nconst pic = { topic: \"securedrop/image\", payload: img };\nmsg.payload = { ok: true, bytes: img.length };\nreturn [[evt, pic], msg];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 900,
+    "wires": [
+      [
+        "sd_mqtt_out"
+      ],
+      [
+        "sd_h_out2"
+      ]
+    ]
+  },
+  {
+    "id": "sd_mqtt_out",
+    "type": "mqtt out",
+    "z": "sd_tab",
+    "name": "publish (topic from msg)",
+    "topic": "",
+    "qos": "1",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "sd_mqtt",
+    "x": 710,
+    "y": 890,
+    "wires": []
+  },
+  {
+    "id": "sd_h_out2",
+    "type": "http response",
+    "z": "sd_tab",
+    "name": "",
+    "statusCode": "",
+    "headers": {},
+    "x": 690,
+    "y": 940,
+    "wires": []
+  }
+]
