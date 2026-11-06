@@ -20,7 +20,6 @@
     <img src="https://img.shields.io/badge/Backend-Node--RED-8F0000?style=flat-square&logo=nodered&logoColor=white" alt="Node-RED" />
     <img src="https://img.shields.io/badge/Runtime-Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js" />
     <img src="https://img.shields.io/badge/Alerts-Telegram_API-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram" />
-    <img src="https://img.shields.io/badge/License-MIT-blue?style=flat-square" alt="License" />
   </p>
 
 </div>
